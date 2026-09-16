@@ -126,8 +126,14 @@ function laesSeddel(string $jpeg): array {
     require_once __DIR__ . '/agentlib.php';
     if (CLAUDE_API_KEY === '') fejl('Der er ingen CLAUDE_API_KEY i config.php, så sedlen kan ikke læses automatisk.', 503);
 
-    // Håndskrift er svær. Den billige model, agenten bruger, er ikke god nok her.
-    $model = defined('CLAUDE_MODEL_SEDDEL') ? CLAUDE_MODEL_SEDDEL : 'claude-opus-5';
+    // Håndskrift er svær, så den billige model, agenten bruger, er ikke god nok her.
+    // Sonnet prøver først; kan den ikke, tager Opus over. Fable bruges aldrig.
+    $modeller = [
+        defined('CLAUDE_MODEL_SEDDEL') ? CLAUDE_MODEL_SEDDEL : 'claude-sonnet-5',
+        defined('CLAUDE_MODEL_SEDDEL_RESERVE') ? CLAUDE_MODEL_SEDDEL_RESERVE : 'claude-opus-5',
+    ];
+    $modeller = array_values(array_unique(array_filter($modeller, fn($m) => $m !== '' && stripos($m, 'fable') === false)));
+    if (!$modeller) fejl('Der er ingen tilladt model sat til at læse sedlen i config.php.', 503);
 
     $navn = [
         'type' => 'object',
@@ -186,15 +192,30 @@ Skriv i bemaerkning kort på dansk, hvis noget på sedlen ikke kunne læses. Ell
 Opdigt aldrig navne, der ikke står på sedlen.
 TXT;
 
+    $sidsteFejl = '';
+    foreach ($modeller as $model) {
+        $d = kaldSeddelModel($model, $jpeg, $skema, $instruks);
+        if (is_array($d)) {
+            $d['model'] = $model;
+            return $d;
+        }
+        $sidsteFejl = $d;
+    }
+    fejl($sidsteFejl, 502);
+}
+
+/* Returnerer det læste som array, eller en fejlbesked som tekst,
+   så næste model kan få en chance. */
+function kaldSeddelModel(string $model, string $jpeg, array $skema, string $instruks) {
+    // Ingen server-side fallbacks: de kunne sende billedet videre til en model,
+    // vi ikke har valgt. Rækkefølgen styres i laesSeddel().
     $r = httpJson(CLAUDE_API_URL, [
         'Content-Type: application/json',
         'x-api-key: ' . CLAUDE_API_KEY,
         'anthropic-version: 2023-06-01',
-        'anthropic-beta: server-side-fallback-2026-07-01',
     ], [
         'model'         => $model,
         'max_tokens'    => 16000,
-        'fallbacks'     => 'default',
         'output_config' => [
             'effort' => 'medium',
             'format' => ['type' => 'json_schema', 'schema' => $skema],
@@ -206,22 +227,27 @@ TXT;
                 ['type' => 'text', 'text' => $instruks],
             ],
         ]],
-    ], 110);
+    ], 70);
 
     if ($r['kode'] !== 200) {
         $besked = $r['data']['error']['message'] ?? ($r['fejl'] ?: ('HTTP ' . $r['kode']));
-        fejl('Claude kunne ikke læse sedlen: ' . $besked, 502);
+        return 'Claude kunne ikke læse sedlen: ' . $besked;
     }
     $stop = (string) ($r['data']['stop_reason'] ?? '');
-    if ($stop === 'refusal') fejl('Claude ville ikke læse billedet. Tast navnene ind selv.', 502);
-    if ($stop === 'max_tokens') fejl('Svaret fra Claude blev afbrudt. Prøv igen.', 502);
+    if ($stop === 'refusal') return 'Claude ville ikke læse billedet.';
+    if ($stop === 'max_tokens') return 'Svaret fra Claude blev afbrudt.';
 
     $tekst = '';
     foreach ((array) ($r['data']['content'] ?? []) as $blok) {
         if (($blok['type'] ?? '') === 'text') $tekst .= $blok['text'];
     }
     $d = json_decode($tekst, true);
-    if (!is_array($d) || !isset($d['placeringer'])) fejl('Claudes svar kunne ikke læses. Prøv igen.', 502);
+    if (!is_array($d) || !isset($d['placeringer'])) return 'Claudes svar kunne ikke læses.';
+
+    // Fandt modellen ingen navne, er det også et "kan ikke", og næste model prøver.
+    $navne = 0;
+    foreach ((array) $d['placeringer'] as $p) $navne += count((array) ($p['navne'] ?? []));
+    if ($navne === 0) return 'Claude kunne ikke finde nogen navne på sedlen.' . (!empty($d['bemaerkning']) ? ' (' . $d['bemaerkning'] . ')' : '');
     return $d;
 }
 

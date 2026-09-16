@@ -52,9 +52,10 @@ define('CLAUDE_API_KEY', '');
 define('CLAUDE_API_URL', 'https://api.anthropic.com/v1/messages');
 define('CLAUDE_MODEL', 'claude-haiku-4-5-20251001');
 
-// Modellen der læser A's håndskrevne seddel. Håndskrift kræver en stærk model;
-// det koster omkring en krone pr. seddel. Mangler linjen, bruges claude-opus-5.
-define('CLAUDE_MODEL_SEDDEL', 'claude-opus-5');
+// Modellerne der læser A's håndskrevne seddel. Den første prøver; kan den
+// ikke læse sedlen, tager reserven over. Fable-modeller afvises altid.
+define('CLAUDE_MODEL_SEDDEL', 'claude-sonnet-5');
+define('CLAUDE_MODEL_SEDDEL_RESERVE', 'claude-opus-5');
 
 // Svar lægges tilfældigt mellem disse to, så tråden ikke ser maskinel ud.
 define('FORSINKELSE_MIN', 4);
