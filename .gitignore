@@ -4,3 +4,6 @@ config.php
 # Indsendte billeder og navne (persondata)
 /data/*
 !/data/.htaccess
+
+# Lokale indstillinger til Claude Code
+.claude/

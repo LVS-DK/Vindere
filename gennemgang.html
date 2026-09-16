@@ -41,6 +41,27 @@
     <h2>Indsendelser</h2>
     <p class="lede">Nyeste øverst. Åbn en for at tjekke navnene og beskære billederne.</p>
     <div class="postlist" id="postlist"></div>
+
+    <div class="sectionhead"><h3>Begivenheder</h3><div class="rule"></div></div>
+    <p class="lede">A's telefon viser automatisk dagens begivenhed, og hun kan vælge mellem dem her.</p>
+    <div class="postlist" id="eventlist"></div>
+
+    <div class="eventform" id="eventForm">
+      <div class="field">
+        <label for="eventDato">Dato</label>
+        <input type="date" id="eventDato">
+      </div>
+      <div class="field">
+        <label for="eventSport">Sportsgren</label>
+        <input type="text" id="eventSport" maxlength="80" placeholder="F.eks. Petanque">
+      </div>
+      <div class="navrow" style="margin-top:0">
+        <button class="btn btn-ghost" id="eventCancel" hidden>Fortryd</button>
+        <button class="btn btn-hand" id="eventSave">Opret begivenhed</button>
+      </div>
+      <div id="eventStatus"></div>
+    </div>
+
     <div class="footnote">
       Indsendelser slettes automatisk efter opbevaringsperioden i config.php.
       <button id="refresh">Opdatér</button> · <a href="skygge.html" style="color:var(--accent);font-weight:600">Kommentarsporet</a> · <button id="logout">Log ud</button>
@@ -136,7 +157,7 @@ function visLogin(){ $("#login").hidden = false; $("#app").hidden = true; setTim
 function loginMed(kode, stille){
   return api("login", {json:{kode:kode}}).then(function(r){
     if(r.rolle !== "brian") throw new Error("Den kode giver kun adgang til registreringssiden.");
-    ls("kode", kode); visApp(); hentListe();
+    ls("kode", kode); visApp(); hentListe(); hentBegivenheder();
   }).catch(function(e){
     if(!stille) $("#loginStatus").innerHTML = '<div class="status bad"><div class="dot"></div><div>'+esc(e.message)+'</div></div>';
     visLogin(); throw e;
@@ -159,7 +180,7 @@ function go(n){
   window.scrollTo({top:0, behavior:"smooth"});
 }
 $("#backBtn").addEventListener("click", function(){ go(1); hentListe(); });
-$("#refresh").addEventListener("click", hentListe);
+$("#refresh").addEventListener("click", function(){ hentListe(); hentBegivenheder(); });
 
 /* ---------- liste ---------- */
 function danskDato(iso){
@@ -193,6 +214,84 @@ document.addEventListener("click", function(e){
   var b = e.target.closest("[data-open]");
   if(b) aabn(b.dataset.open);
 });
+
+/* ---------- begivenheder ---------- */
+var begivenheder = [], redigerer = null;
+
+function iDag(){
+  var d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function eventStatus(cls, tekst){
+  $("#eventStatus").innerHTML = tekst ? '<div class="status '+cls+'"><div class="dot"></div><div>'+esc(tekst)+'</div></div>' : "";
+}
+function renderBegivenheder(){
+  var dag = iDag();
+  $("#eventlist").innerHTML = begivenheder.length ? begivenheder.map(function(bg){
+    var maerke = bg.dato === dag ? '<span class="pill afventer">I dag</span>'
+      : bg.dato < dag ? '<span class="pill godkendt">Afholdt</span>' : "";
+    return '<div class="post begivenhed'+(bg.dato < dag ? " forbi" : "")+'">'
+      + '<div class="who"><b>'+esc(bg.sport)+'</b><span>'+esc(danskDato(bg.dato))+'</span></div>'
+      + maerke
+      + '<button class="linkbtn" data-ret="'+esc(bg.id)+'">Ret</button>'
+      + '<button class="linkbtn" data-slet="'+esc(bg.id)+'">Slet</button></div>';
+  }).join("") : '<div class="empty">Ingen begivenheder endnu. Opret den første herunder.</div>';
+}
+function nulstilForm(){
+  redigerer = null;
+  $("#eventDato").value = iDag();
+  $("#eventSport").value = "";
+  $("#eventSave").textContent = "Opret begivenhed";
+  $("#eventCancel").hidden = true;
+}
+function hentBegivenheder(){
+  return api("begivenheder").then(function(r){
+    begivenheder = r.begivenheder || []; renderBegivenheder();
+  }).catch(function(e){
+    $("#eventlist").innerHTML = '<div class="status bad"><div class="dot"></div><div>'+esc(e.message)+'</div></div>';
+  });
+}
+$("#eventSave").addEventListener("click", function(){
+  var btn = this;
+  var data = {sport: $("#eventSport").value.trim(), dato: $("#eventDato").value};
+  if(redigerer) data.id = redigerer;
+  btn.disabled = true; eventStatus("", "");
+  api("gembegivenhed", {json:data}).then(function(r){
+    begivenheder = r.begivenheder || []; renderBegivenheder();
+    eventStatus("hand", (redigerer ? "Rettet: " : "Oprettet: ") + data.sport + " · " + danskDato(data.dato));
+    nulstilForm();
+  }).catch(function(e){ eventStatus("bad", e.message); })
+    .then(function(){ btn.disabled = false; });
+});
+$("#eventCancel").addEventListener("click", function(){ nulstilForm(); eventStatus("", ""); });
+$("#eventSport").addEventListener("keydown", function(e){ if(e.key==="Enter") $("#eventSave").click(); });
+document.addEventListener("click", function(e){
+  var ret = e.target.closest("[data-ret]");
+  if(ret){
+    var bg = begivenheder.filter(function(x){ return x.id === ret.dataset.ret; })[0];
+    if(!bg) return;
+    redigerer = bg.id;
+    $("#eventDato").value = bg.dato;
+    $("#eventSport").value = bg.sport;
+    $("#eventSave").textContent = "Gem rettelsen";
+    $("#eventCancel").hidden = false;
+    eventStatus("", "");
+    $("#eventForm").scrollIntoView({behavior:"smooth", block:"center"});
+    $("#eventSport").focus();
+    return;
+  }
+  var sl = e.target.closest("[data-slet]");
+  if(sl){
+    var b2 = begivenheder.filter(function(x){ return x.id === sl.dataset.slet; })[0];
+    if(!b2 || !confirm("Slet " + b2.sport + " · " + danskDato(b2.dato) + "?")) return;
+    api("sletbegivenhed", {json:{id:b2.id}}).then(function(r){
+      begivenheder = r.begivenheder || []; renderBegivenheder();
+      if(redigerer === b2.id) nulstilForm();
+      eventStatus("hand", "Slettet: " + b2.sport + " · " + danskDato(b2.dato));
+    }).catch(function(e){ eventStatus("bad", e.message); });
+  }
+});
+nulstilForm();
 
 /* ---------- én indsendelse ---------- */
 var post = null, billeder = {}, udsnit = {};
@@ -432,7 +531,7 @@ $("#deleteBtn").addEventListener("click", function(){
 
 /* ---------- opstart ---------- */
 api("hvem").then(function(r){
-  if(r.rolle === "brian"){ visApp(); hentListe(); return; }
+  if(r.rolle === "brian"){ visApp(); hentListe(); hentBegivenheder(); return; }
   var gemt = ls("kode");
   if(gemt) return loginMed(gemt, true).catch(function(){});
   visLogin();

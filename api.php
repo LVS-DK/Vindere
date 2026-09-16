@@ -97,6 +97,29 @@ function sikrDataMappe(): void {
     }
 }
 
+/* ---------- begivenheder ---------- */
+
+function begivenhedSti(): string {
+    return DATA_DIR . '/begivenheder.json';
+}
+
+function laesBegivenheder(): array {
+    $sti = begivenhedSti();
+    if (!is_file($sti)) return [];
+    $data = json_decode((string) file_get_contents($sti), true);
+    return is_array($data) ? array_values($data) : [];
+}
+
+function gemBegivenheder(array $liste): void {
+    usort($liste, fn($a, $b) => strcmp((string) $a['dato'], (string) $b['dato']) ?: strcmp((string) $a['sport'], (string) $b['sport']));
+    file_put_contents(begivenhedSti(), json_encode(array_values($liste), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
+}
+
+function gyldigDato(string $dato): bool {
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $dato, $m)) return false;
+    return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
+}
+
 /* ---------- ruter ---------- */
 
 $do = (string) ($_GET['do'] ?? '');
@@ -191,6 +214,49 @@ case 'faerdig':
     $meta['sendt'] = date('c');
     gemMeta($id, $meta);
     svar(['ok' => true]);
+
+/* --- begivenheder: A læser, Brian retter --- */
+
+case 'begivenheder':
+    kraev('a', 'brian');
+    sikrDataMappe();
+    svar(['begivenheder' => laesBegivenheder()]);
+
+case 'gembegivenhed':
+    if (!$post) fejl('Forkert metode.', 405);
+    kraev('brian');
+    sikrDataMappe();
+    $b = kropSomJson();
+    $sport = trim((string) ($b['sport'] ?? ''));
+    $dato = (string) ($b['dato'] ?? '');
+    if ($sport === '') fejl('Skriv hvilken sportsgren det er.');
+    if (!preg_match('/^.{1,80}$/u', $sport)) fejl('Sportsgrenen må højst være 80 tegn.');
+    if (!gyldigDato($dato)) fejl('Vælg en gyldig dato.');
+    $id = (string) ($b['id'] ?? '');
+    $liste = laesBegivenheder();
+    if ($id === '') {
+        $id = bin2hex(random_bytes(8));
+        $liste[] = ['id' => $id, 'sport' => $sport, 'dato' => $dato];
+    } else {
+        $fundet = false;
+        foreach ($liste as &$bg) {
+            if (($bg['id'] ?? '') === $id) { $bg['sport'] = $sport; $bg['dato'] = $dato; $fundet = true; }
+        }
+        unset($bg);
+        if (!$fundet) fejl('Begivenheden findes ikke længere.', 404);
+    }
+    gemBegivenheder($liste);
+    svar(['id' => $id, 'begivenheder' => laesBegivenheder()]);
+
+case 'sletbegivenhed':
+    if (!$post) fejl('Forkert metode.', 405);
+    kraev('brian');
+    sikrDataMappe();
+    $b = kropSomJson();
+    $id = (string) ($b['id'] ?? '');
+    $liste = array_filter(laesBegivenheder(), fn($bg) => ($bg['id'] ?? '') !== $id);
+    gemBegivenheder($liste);
+    svar(['begivenheder' => laesBegivenheder()]);
 
 /* --- Brian gennemgår --- */
 

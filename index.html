@@ -54,6 +54,7 @@
       </div>
       <button class="linkbtn" id="planEdit">Ret</button>
     </div>
+    <select class="planvalg" id="planValg" aria-label="Vælg begivenhed" hidden></select>
 
     <button class="drop" id="noteDrop">
       <div class="big">Fotografér sedlen</div>
@@ -249,10 +250,50 @@ function renderPlan(){
   $("#planDato").textContent = danskDato(state.dato);
   updateMeta();
 }
-$("#planEdit").addEventListener("click", function(){
+var begivenheder = [];
+function iDag(){
+  var d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function dageFra(iso, dage){
+  var p = iso.split("-"), d = new Date(+p[0], +p[1]-1, +p[2] + dage);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function andenSport(){
   var v = prompt("Hvilken sportsgren er det i dag?", state.sport);
   if(v===null) return;
-  state.sport = v.trim(); ls("sport", state.sport); renderPlan();
+  state.sport = v.trim(); state.dato = iDag(); ls("sport", state.sport); renderPlan();
+}
+function hentBegivenheder(){
+  return api("begivenheder").then(function(r){
+    begivenheder = r.begivenheder || [];
+    var idag = begivenheder.filter(function(bg){ return bg.dato === iDag(); })[0];
+    if(idag){ state.sport = idag.sport; state.dato = idag.dato; renderPlan(); }
+  }).catch(function(){});
+}
+$("#planEdit").addEventListener("click", function(){
+  var valg = $("#planValg");
+  // Vis de seneste 14 dages og kommende 60 dages begivenheder; resten er støj for A.
+  var fra = dageFra(iDag(), -14), til = dageFra(iDag(), 60);
+  var relevante = begivenheder.filter(function(bg){ return bg.dato >= fra && bg.dato <= til; });
+  if(!relevante.length){ andenSport(); return; }
+  if(!valg.hidden){ valg.hidden = true; return; }
+  valg.innerHTML = '<option value="">Vælg begivenhed …</option>'
+    + relevante.map(function(bg){
+      var valgt = bg.sport === state.sport && bg.dato === state.dato ? " selected" : "";
+      return '<option value="'+esc(bg.id)+'"'+valgt+'>'+esc(bg.sport)+' · '+esc(danskDato(bg.dato))+'</option>';
+    }).join("")
+    + '<option value="anden">Anden sportsgren …</option>';
+  valg.hidden = false;
+  valg.focus();
+});
+$("#planValg").addEventListener("change", function(){
+  var v = this.value;
+  this.hidden = true;
+  if(v === "anden"){ andenSport(); return; }
+  var bg = begivenheder.filter(function(x){ return x.id === v; })[0];
+  if(!bg) return;
+  state.sport = bg.sport; state.dato = bg.dato; renderPlan();
 });
 function updateMeta(){
   var bits = [];
@@ -476,13 +517,14 @@ $("#restart").addEventListener("click", function(){
 function start(){
   if(startet) return;
   startet = true;
-  state.dato = new Date().toISOString().slice(0,10);
+  state.dato = iDag();
   state.sport = ls("sport") || "Petanque";
   loadDraft();
   $("#stemning").value = state.stemning;
   renderPlan();
   renderCards();
   go(1);
+  hentBegivenheder();
 }
 api("hvem").then(function(r){
   if(r.rolle){ visApp(); start(); return; }
