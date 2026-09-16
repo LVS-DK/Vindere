@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Gennemgang · Vindersedlen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="stil.css">
+</head>
+<body>
+
+<div class="login" id="login" hidden>
+  <div class="brand hand">Gennem<em>gang</em></div>
+  <p>Log ind for at se dagens indsendelser.</p>
+  <div class="field">
+    <label for="kode">Kode</label>
+    <input type="password" id="kode" autocomplete="current-password" enterkeyhint="go">
+  </div>
+  <button class="btn btn-hand btn-wide" id="loginBtn">Log ind</button>
+  <div id="loginStatus"></div>
+</div>
+
+<div id="app" hidden>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brandrow">
+      <div class="brand hand">Gennem<em>gang</em></div>
+      <div class="brandmeta" id="brandmeta"></div>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+
+  <!-- LISTE -->
+  <section class="panel active" data-panel="1">
+    <div class="eyebrow">Indbakke</div>
+    <h2>Indsendelser</h2>
+    <p class="lede">Nyeste øverst. Åbn en for at tjekke navnene og beskære billederne.</p>
+    <div class="postlist" id="postlist"></div>
+    <div class="footnote">
+      Indsendelser slettes automatisk efter opbevaringsperioden i config.php.
+      <button id="refresh">Opdatér</button> · <a href="skygge.html" style="color:var(--accent);font-weight:600">Kommentarsporet</a> · <button id="logout">Log ud</button>
+    </div>
+  </section>
+
+  <!-- GENNEMGANG -->
+  <section class="panel" data-panel="2">
+    <div class="eyebrow">Manuelt trin</div>
+    <h2 id="revTitle">Klar til gennemgang</h2>
+
+    <div class="notice">
+      <div class="icon">🔔</div>
+      <div>
+        <b id="revHead">A har sendt dagens vindere</b>
+        <p id="revMeta"></p>
+      </div>
+    </div>
+
+    <div id="sedlenWrap" hidden>
+      <div class="sectionhead"><h3>Sedlen</h3><div class="rule"></div></div>
+      <div class="notepreview"><img id="sedlenImg" alt="Den håndskrevne vinderseddel"></div>
+    </div>
+
+    <div class="sectionhead"><h3>Vindere</h3><div class="rule"></div></div>
+    <div class="cards" id="reviewCards"></div>
+
+    <div class="field" style="margin-top:24px">
+      <label for="stemning">Dagens stemning</label>
+      <textarea id="stemning"></textarea>
+    </div>
+
+    <div class="navrow">
+      <button class="btn btn-ghost" id="backBtn">Tilbage</button>
+      <button class="btn btn-hand" id="approveBtn">Hent pakke og godkend</button>
+    </div>
+    <div id="approveStatus"></div>
+    <div class="footnote">
+      Pakken indeholder billederne som 1080 × 1080 px JPEG, nummereret i galleriets rækkefølge, plus opslag.json.
+      <button id="deleteBtn">Slet denne indsendelse</button>
+    </div>
+  </section>
+</main>
+</div>
+
+<div class="sheet" id="cropSheet" role="dialog" aria-modal="true" aria-label="Beskær billedet">
+  <div class="sheetcard">
+    <h3 id="cropTitle">Beskær billedet</h3>
+    <p class="sub">Træk i billedet, så ansigterne sidder pænt i firkanten.</p>
+    <canvas id="cropCanvas" width="680" height="680"></canvas>
+    <div class="zoomrow"><span>Zoom</span><input type="range" id="cropZoom" min="1" max="3" step="0.01" value="1"></div>
+    <div class="navrow" style="margin-top:0">
+      <button class="btn btn-ghost" id="cropCancel">Fortryd</button>
+      <button class="btn btn-hand" id="cropOk">Gem beskæringen</button>
+    </div>
+  </div>
+</div>
+
+<script src="lib/jszip.min.js"></script>
+<script>
+(function(){
+"use strict";
+var OUT = 1080;
+var $ = function(s){ return document.querySelector(s); };
+var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
+
+function api(handling, opt){
+  opt = opt || {};
+  var url = "api.php?do=" + encodeURIComponent(handling) + (opt.q ? "&"+opt.q : "");
+  var init = {method: opt.method || "GET", credentials:"same-origin"};
+  if(opt.json !== undefined){
+    init.method = "POST";
+    init.headers = {"Content-Type":"application/json"};
+    init.body = JSON.stringify(opt.json);
+  }
+  return fetch(url, init).then(function(r){
+    return r.json().catch(function(){ throw new Error("Serveren svarede ikke som forventet."); })
+      .then(function(d){
+        if(!r.ok) throw new Error(d && d.fejl ? d.fejl : ("Fejl "+r.status));
+        return d;
+      });
+  });
+}
+function ls(k, v){
+  try{ if(v===undefined) return localStorage.getItem("vsb."+k); localStorage.setItem("vsb."+k, v); }catch(e){}
+  return null;
+}
+
+/* ---------- login ---------- */
+function visApp(){ $("#login").hidden = true; $("#app").hidden = false; }
+function visLogin(){ $("#login").hidden = false; $("#app").hidden = true; setTimeout(function(){ $("#kode").focus(); }, 60); }
+function loginMed(kode, stille){
+  return api("login", {json:{kode:kode}}).then(function(r){
+    if(r.rolle !== "brian") throw new Error("Den kode giver kun adgang til registreringssiden.");
+    ls("kode", kode); visApp(); hentListe();
+  }).catch(function(e){
+    if(!stille) $("#loginStatus").innerHTML = '<div class="status bad"><div class="dot"></div><div>'+esc(e.message)+'</div></div>';
+    visLogin(); throw e;
+  });
+}
+$("#loginBtn").addEventListener("click", function(){
+  var k = $("#kode").value.trim(); if(!k) return;
+  $("#loginStatus").innerHTML = "";
+  loginMed(k, false).catch(function(){});
+});
+$("#kode").addEventListener("keydown", function(e){ if(e.key==="Enter") $("#loginBtn").click(); });
+$("#logout").addEventListener("click", function(){
+  try{ localStorage.removeItem("vsb.kode"); }catch(e){}
+  api("logud").then(visLogin);
+});
+
+/* ---------- navigation ---------- */
+function go(n){
+  document.querySelectorAll(".panel").forEach(function(p){ p.classList.toggle("active", +p.dataset.panel===n); });
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+$("#backBtn").addEventListener("click", function(){ go(1); hentListe(); });
+$("#refresh").addEventListener("click", hentListe);
+
+/* ---------- liste ---------- */
+function danskDato(iso){
+  if(!iso) return "";
+  var m = ["januar","februar","marts","april","maj","juni","juli","august","september","oktober","november","december"];
+  var p = String(iso).split("-"); if(p.length!==3) return iso;
+  return (+p[2]) + ". " + m[(+p[1])-1] + " " + p[0];
+}
+function klokken(iso){
+  if(!iso) return "";
+  var d = new Date(iso);
+  if(isNaN(d)) return "";
+  return d.toLocaleString("da-DK", {day:"numeric", month:"short", hour:"2-digit", minute:"2-digit"});
+}
+function hentListe(){
+  return api("liste").then(function(r){
+    var poster = r.poster || [];
+    var afventer = poster.filter(function(p){ return p.status==="afventer"; }).length;
+    $("#brandmeta").innerHTML = afventer ? afventer + " afventer" : "Ingen nye";
+    $("#postlist").innerHTML = poster.length ? poster.map(function(p){
+      return '<button class="post" data-open="'+esc(p.id)+'">'
+        + '<div class="who"><b>'+esc(p.sport || "Uden sportsgren")+'</b>'
+        + '<span>'+esc(danskDato(p.dato))+' · '+p.antal+' vindere · sendt '+esc(klokken(p.sendt))+'</span></div>'
+        + '<span class="pill '+esc(p.status)+'">'+(p.status==="afventer"?"Ny":"Godkendt")+'</span></button>';
+    }).join("") : '<div class="empty">Ingen indsendelser endnu. Når A trykker send, dukker dagen op her.</div>';
+  }).catch(function(e){
+    $("#postlist").innerHTML = '<div class="status bad"><div class="dot"></div><div>'+esc(e.message)+'</div></div>';
+  });
+}
+document.addEventListener("click", function(e){
+  var b = e.target.closest("[data-open]");
+  if(b) aabn(b.dataset.open);
+});
+
+/* ---------- én indsendelse ---------- */
+var post = null, billeder = {}, udsnit = {};
+
+function billedUrl(slot){ return "api.php?do=billede&id=" + encodeURIComponent(post.id) + "&slot=" + encodeURIComponent(slot); }
+
+function hentCanvas(slot){
+  if(billeder[slot]) return Promise.resolve(billeder[slot]);
+  return new Promise(function(res, rej){
+    var img = new Image();
+    img.onload = function(){
+      var c = document.createElement("canvas");
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext("2d").drawImage(img, 0, 0);
+      billeder[slot] = c; res(c);
+    };
+    img.onerror = function(){ rej(new Error("Billedet kunne ikke hentes.")); };
+    img.src = billedUrl(slot);
+  });
+}
+function aabn(id){
+  api("hent", {q:"id="+encodeURIComponent(id)}).then(function(r){
+    post = r.post; billeder = {}; udsnit = post.udsnit || {};
+    (post.vindere || []).forEach(function(v){
+      if(v.slot && !udsnit[v.slot]) udsnit[v.slot] = {ox:0.5, oy:0.34, zoom:1, gjort:false};
+    });
+    var f = post.faellesskabspokal;
+    if(f && f.slot && !udsnit[f.slot]) udsnit[f.slot] = {ox:0.5, oy:0.34, zoom:1, gjort:false};
+
+    $("#stemning").value = post.stemning || "";
+    $("#revTitle").textContent = (post.sport || "Uden sportsgren") + " · " + danskDato(post.dato);
+    $("#revHead").textContent = post.status === "godkendt" ? "Allerede godkendt" : "A har sendt dagens vindere";
+    $("#sedlenWrap").hidden = true;
+    var harSeddel = false;
+    // sedlen ligger i slot "s"; vi prøver bare at vise den
+    var img = $("#sedlenImg");
+    img.onload = function(){ $("#sedlenWrap").hidden = false; };
+    img.onerror = function(){ $("#sedlenWrap").hidden = true; };
+    img.src = billedUrl("s");
+
+    renderReview();
+    go(2);
+  }).catch(function(e){ alert(e.message); });
+}
+function opdaterMeta(){
+  var slots = Object.keys(udsnit);
+  var gjort = slots.filter(function(s){ return udsnit[s].gjort; }).length;
+  $("#revMeta").textContent = (post.vindere||[]).length + " vindere · " + gjort + " af " + slots.length
+    + " billeder beskåret" + (post.samtykke ? " · samtykke bekræftet" : " · SAMTYKKE IKKE BEKRÆFTET") + ".";
+}
+function reviewRow(item, kind, index){
+  var isC = kind==="community";
+  var cls = isC ? "faellesskab" : ("p"+(index+1));
+  var label = isC ? "Fællesskabspokalen" : (index+1)+". plads";
+  var slot = item.slot;
+  var u = slot ? udsnit[slot] : null;
+  var box = slot
+    ? '<button class="photobox filled'+(u && u.gjort ? "" : " needscrop")+'" data-crop="'+esc(slot)+'">'
+      + '<img src="'+billedUrl(slot)+'" alt=""><span class="edit">'+(u && u.gjort ? "Beskåret" : "Beskær")+'</span></button>'
+    : '<div class="photobox"><span class="plus">–</span><span class="cap">Mangler</span></div>';
+  var extra = isC
+    ? '<div class="field"><label for="beg">Begrundelse</label><textarea id="beg" data-f="begrundelse" data-kind="c">'+esc(item.begrundelse||"")+'</textarea></div>'
+    : '';
+  return '<div class="card '+cls+'">'+ box
+    + '<div class="cardbody"><div class="place">'+esc(label)+'</div>'
+    + '<div class="field"><label for="fn'+index+kind+'">Fornavn</label>'
+    + '<input type="text" id="fn'+index+kind+'" value="'+esc(item.fornavn||"")+'" data-f="fornavn" data-kind="'+kind+'" data-i="'+index+'"></div>'
+    + '<div class="field"><label for="vs'+index+kind+'">Værested</label>'
+    + '<input type="text" id="vs'+index+kind+'" value="'+esc(item.vaerested||"")+'" data-f="vaerested" data-kind="'+kind+'" data-i="'+index+'"></div>'
+    + extra + '</div></div>';
+}
+function renderReview(){
+  var html = (post.vindere||[]).map(function(v,i){ return reviewRow(v,"winner",i); }).join("");
+  if(post.faellesskabspokal) html += reviewRow(post.faellesskabspokal,"community",0);
+  $("#reviewCards").innerHTML = html;
+  opdaterMeta();
+}
+document.addEventListener("input", function(e){
+  var t = e.target;
+  if(!t.dataset || !t.dataset.f || !post) return;
+  if(t.dataset.kind === "community" || t.dataset.kind === "c"){
+    if(post.faellesskabspokal) post.faellesskabspokal[t.dataset.f] = t.value;
+  } else if(t.dataset.kind === "winner"){
+    var v = (post.vindere||[])[+t.dataset.i];
+    if(v) v[t.dataset.f] = t.value;
+  }
+});
+$("#stemning").addEventListener("input", function(){ if(post) post.stemning = this.value; });
+
+/* ---------- beskæring ---------- */
+var cropSlot = null, cropState = null;
+var cropCanvas = $("#cropCanvas"), cropZoom = $("#cropZoom");
+function renderCrop(target, src, u, size){
+  var base = Math.max(size/src.width, size/src.height);
+  var sc = base * u.zoom;
+  var dw = src.width*sc, dh = src.height*sc;
+  target.width = size; target.height = size;
+  var ctx = target.getContext("2d");
+  ctx.clearRect(0,0,size,size);
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(src, (size-dw)*u.ox, (size-dh)*u.oy, dw, dh);
+  return {dw:dw, dh:dh};
+}
+function drawCrop(){ if(cropSlot) renderCrop(cropCanvas, billeder[cropSlot], cropState, 680); }
+document.addEventListener("click", function(e){
+  var b = e.target.closest("[data-crop]"); if(!b) return;
+  var slot = b.dataset.crop;
+  hentCanvas(slot).then(function(){
+    cropSlot = slot;
+    var u = udsnit[slot] || {ox:0.5, oy:0.34, zoom:1, gjort:false};
+    cropState = {ox:u.ox, oy:u.oy, zoom:u.zoom};
+    cropZoom.value = cropState.zoom;
+    $("#cropSheet").classList.add("open");
+    drawCrop();
+  }).catch(function(err){ alert(err.message); });
+});
+cropZoom.addEventListener("input", function(){ if(!cropSlot) return; cropState.zoom = +cropZoom.value; clamp(); drawCrop(); });
+function clamp(){
+  cropState.ox = Math.min(1, Math.max(0, cropState.ox));
+  cropState.oy = Math.min(1, Math.max(0, cropState.oy));
+}
+var dragging=false, lastX=0, lastY=0;
+cropCanvas.addEventListener("pointerdown", function(e){
+  if(!cropSlot) return;
+  dragging=true; lastX=e.clientX; lastY=e.clientY;
+  try{ cropCanvas.setPointerCapture(e.pointerId); }catch(err){}
+});
+cropCanvas.addEventListener("pointermove", function(e){
+  if(!dragging || !cropSlot) return;
+  var rect = cropCanvas.getBoundingClientRect();
+  var k = 680/rect.width;
+  var d = renderCrop(cropCanvas, billeder[cropSlot], cropState, 680);
+  var mx = (e.clientX-lastX)*k, my = (e.clientY-lastY)*k;
+  if(d.dw > 680.5) cropState.ox += mx/(680-d.dw);
+  if(d.dh > 680.5) cropState.oy += my/(680-d.dh);
+  lastX=e.clientX; lastY=e.clientY;
+  clamp(); drawCrop();
+});
+["pointerup","pointercancel"].forEach(function(ev){ cropCanvas.addEventListener(ev, function(){ dragging=false; }); });
+$("#cropCancel").addEventListener("click", function(){ $("#cropSheet").classList.remove("open"); cropSlot=null; });
+$("#cropOk").addEventListener("click", function(){
+  if(!cropSlot) return;
+  udsnit[cropSlot] = {ox:cropState.ox, oy:cropState.oy, zoom:cropState.zoom, gjort:true};
+  $("#cropSheet").classList.remove("open");
+  cropSlot = null;
+  renderReview();
+  api("gemudsnit", {q:"id="+encodeURIComponent(post.id), json:{udsnit:udsnit}}).catch(function(){});
+});
+
+/* ---------- eksport ---------- */
+function slug(s){
+  return String(s||"vinder").toLowerCase()
+    .replace(/æ/g,"ae").replace(/ø/g,"oe").replace(/å/g,"aa")
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "vinder";
+}
+function toBlob(c, q){ return new Promise(function(res){ c.toBlob(function(b){ res(b); }, "image/jpeg", q||0.9); }); }
+function status(cls, tekst){
+  $("#approveStatus").innerHTML = '<div class="status '+cls+'"><div class="dot"></div><div>'+esc(tekst)+'</div></div>';
+}
+$("#approveBtn").addEventListener("click", function(){
+  if(!post) return;
+  if(typeof JSZip === "undefined"){
+    status("bad", "Filen lib/jszip.min.js mangler på serveren, så pakken kan ikke bygges. Læg mappen lib med op.");
+    return;
+  }
+  var mangler = Object.keys(udsnit).filter(function(s){ return !udsnit[s].gjort; }).length;
+  if(mangler && !confirm(mangler + " billede(r) er ikke beskåret endnu. De bliver skåret midt i billedet. Fortsæt?")) return;
+  var btn = $("#approveBtn"); btn.disabled = true;
+  status("hand", "Henter og beskærer billederne …");
+
+  var zip = new JSZip();
+  var filer = [];
+  var kaede = Promise.resolve();
+
+  (post.vindere||[]).forEach(function(v,i){
+    if(!v.slot) return;
+    var navn = String(i+1).padStart(2,"0") + "-" + slug(v.fornavn) + ".jpg";
+    kaede = kaede.then(function(){
+      return hentCanvas(v.slot).then(function(src){
+        var c = document.createElement("canvas");
+        renderCrop(c, src, udsnit[v.slot], OUT);
+        return toBlob(c, 0.9).then(function(b){ zip.file(navn, b); filer.push(navn); });
+      });
+    });
+    v.billede = navn;
+  });
+  var f = post.faellesskabspokal;
+  if(f && f.slot){
+    var fnavn = "99-faellesskabspokal-" + slug(f.fornavn) + ".jpg";
+    kaede = kaede.then(function(){
+      return hentCanvas(f.slot).then(function(src){
+        var c = document.createElement("canvas");
+        renderCrop(c, src, udsnit[f.slot], OUT);
+        return toBlob(c, 0.9).then(function(b){ zip.file(fnavn, b); filer.push(fnavn); });
+      });
+    });
+    f.billede = fnavn;
+  }
+
+  kaede.then(function(){
+    status("hand", "Pakker …");
+    zip.file("opslag.json", JSON.stringify({
+      sport: post.sport, dato: post.dato, stemning: post.stemning,
+      vindere: (post.vindere||[]).map(function(v,i){
+        return {placering:i+1, fornavn:v.fornavn, vaerested:v.vaerested, billede:v.billede || null};
+      }),
+      faellesskabspokal: f ? {fornavn:f.fornavn, vaerested:f.vaerested, begrundelse:f.begrundelse, billede:f.billede||null} : null,
+      samtykke_bekraeftet: !!post.samtykke,
+      godkendt: new Date().toISOString()
+    }, null, 2));
+    return zip.generateAsync({type:"blob"});
+  }).then(function(blob){
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "vindere-" + (post.dato || "i-dag") + "-" + slug(post.sport) + ".zip";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 6000);
+    return api("godkend", {q:"id="+encodeURIComponent(post.id), json:{
+      vindere: post.vindere, faellesskabspokal: post.faellesskabspokal,
+      stemning: post.stemning, sport: post.sport
+    }});
+  }).then(function(){
+    btn.disabled = false;
+    status("hand", "Pakken er hentet, og indsendelsen er markeret som godkendt.");
+  }).catch(function(e){
+    btn.disabled = false;
+    status("bad", "Gik galt: " + e.message);
+  });
+});
+
+$("#deleteBtn").addEventListener("click", function(){
+  if(!post || !confirm("Slet denne indsendelse med billeder og det hele? Det kan ikke fortrydes.")) return;
+  api("slet", {q:"id="+encodeURIComponent(post.id), json:{}}).then(function(){
+    post = null; go(1); hentListe();
+  }).catch(function(e){ alert(e.message); });
+});
+
+/* ---------- opstart ---------- */
+api("hvem").then(function(r){
+  if(r.rolle === "brian"){ visApp(); hentListe(); return; }
+  var gemt = ls("kode");
+  if(gemt) return loginMed(gemt, true).catch(function(){});
+  visLogin();
+}).catch(function(){ visLogin(); });
+})();
+</script>
+</body>
+</html>

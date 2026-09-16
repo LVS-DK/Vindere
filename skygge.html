@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Kommentarsporet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<link rel="stylesheet" href="stil.css">
+<style>
+.maal{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px}
+.maal div{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:13px 14px;box-shadow:var(--shadow)}
+.maal b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.maal span{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tilstand{display:flex;gap:11px;align-items:flex-start;border-radius:var(--radius);padding:13px 15px;margin-bottom:22px;font-size:13.5px;line-height:1.45}
+.tilstand.skygge{background:var(--hand-soft);color:var(--ink-2)}
+.tilstand.live{background:var(--warn-soft);color:var(--warn)}
+.tilstand b{font-family:"Bricolage Grotesque",sans-serif}
+
+.kom{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:15px 16px 13px 19px;box-shadow:var(--shadow);position:relative}
+.kom::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;border-radius:var(--radius) 0 0 var(--radius);background:var(--muted)}
+.kom.svar::before{background:var(--accent)}
+.kom.like::before{background:var(--hand)}
+.kom.til_dig::before{background:var(--warn)}
+.kom.akut::before{background:var(--faellesskab)}
+.kom.ignorer::before{background:var(--line)}
+.komhoved{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:7px}
+.komhoved .navn{font-weight:600;font-size:14.5px}
+.komhoved .tid{font-size:12px;color:var(--muted)}
+.spor{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;border-radius:99px;padding:3px 9px}
+.spor.svar{background:var(--accent-soft);color:var(--accent-deep)}
+.spor.like{background:var(--hand-soft);color:var(--hand)}
+.spor.til_dig{background:var(--warn-soft);color:var(--warn)}
+.spor.akut{background:#F7E4DE;color:var(--faellesskab)}
+.spor.ignorer{background:var(--surface-2);color:var(--muted)}
+.komtekst{font-size:15.5px;line-height:1.5;margin:0 0 10px}
+.hvorfor{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 10px}
+.forslag{background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 9px 9px 0;padding:10px 13px;font-size:14.5px;line-height:1.45;margin:0 0 12px}
+.forslag em{display:block;font-style:normal;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:4px}
+.domrow{display:flex;gap:8px;align-items:center;border-top:1px solid var(--line-soft);padding-top:11px}
+.domrow .btn{min-height:38px;padding:8px 14px;font-size:13.5px;border-radius:9px}
+.domrow .svarret{background:var(--accent-soft);color:var(--accent-deep)}
+.domrow .forkert{background:var(--warn-soft);color:var(--warn)}
+.domrow .valgt{outline:2px solid currentColor;outline-offset:1px}
+.domrow .sagt{font-size:12.5px;color:var(--muted);margin-left:auto}
+#logboks{background:var(--surface);border:1px solid var(--line-soft);border-radius:11px;
+  padding:13px 15px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12.5px;line-height:1.6;color:var(--ink-2);overflow-x:auto;white-space:pre;
+  max-height:340px;overflow-y:auto;box-shadow:var(--shadow);margin:0}
+#logboks .tom{color:var(--muted)}
+.udfoert{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--accent-deep)}
+</style>
+</head>
+<body>
+
+<div class="login" id="login" hidden>
+  <div class="brand hand">Kommentar<em>sporet</em></div>
+  <p>Log ind med din egen kode.</p>
+  <div class="field"><label for="kode">Kode</label><input type="password" id="kode" autocomplete="current-password" enterkeyhint="go"></div>
+  <button class="btn btn-hand btn-wide" id="loginBtn">Log ind</button>
+  <div id="loginStatus"></div>
+</div>
+
+<div id="app" hidden>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brandrow">
+      <div class="brand hand">Kommentar<em>sporet</em></div>
+      <div class="brandmeta" id="brandmeta"></div>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <section class="panel active">
+    <div class="eyebrow">Agentens arbejde</div>
+    <h2>Hvad ville den have gjort?</h2>
+    <p class="lede">Hver kommentar med agentens vurdering. Sig om den ramte rigtigt — det er tallet, der afgør, hvornår den må slippes løs.</p>
+
+    <div id="tilstandBoks"></div>
+    <div class="maal" id="maal"></div>
+    <div class="cards" id="liste"></div>
+
+    <div class="sectionhead" style="margin-top:34px"><h3>Log</h3><div class="rule"></div>
+      <button class="linkbtn hand" id="logToggle">Vis</button></div>
+    <pre id="logboks" hidden></pre>
+
+    <div class="footnote">
+      Agenten kører fra <code>agent.php</code> via cron. Tilstanden ændres i <code>config.php</code>.
+      <button id="refresh">Opdatér</button> · <button id="logout">Log ud</button>
+    </div>
+  </section>
+</main>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $ = function(s){ return document.querySelector(s); };
+var esc = function(s){ return String(s==null?"":s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); };
+
+function api(handling, opt){
+  opt = opt || {};
+  var init = {method:"GET", credentials:"same-origin"};
+  if(opt.json !== undefined){
+    init.method = "POST";
+    init.headers = {"Content-Type":"application/json"};
+    init.body = JSON.stringify(opt.json);
+  }
+  return fetch("api.php?do="+encodeURIComponent(handling), init).then(function(r){
+    return r.json().catch(function(){ throw new Error("Serveren svarede ikke som forventet."); })
+      .then(function(d){ if(!r.ok) throw new Error(d && d.fejl ? d.fejl : ("Fejl "+r.status)); return d; });
+  });
+}
+function ls(k,v){ try{ if(v===undefined) return localStorage.getItem("vsk."+k); localStorage.setItem("vsk."+k,v); }catch(e){} return null; }
+
+function visApp(){ $("#login").hidden = true; $("#app").hidden = false; }
+function visLogin(){ $("#login").hidden = false; $("#app").hidden = true; setTimeout(function(){ $("#kode").focus(); },60); }
+function loginMed(kode, stille){
+  return api("login", {json:{kode:kode}}).then(function(r){
+    if(r.rolle !== "brian") throw new Error("Den kode giver ikke adgang hertil.");
+    ls("kode", kode); visApp(); hent();
+  }).catch(function(e){
+    if(!stille) $("#loginStatus").innerHTML = '<div class="status bad"><div class="dot"></div><div>'+esc(e.message)+'</div></div>';
+    visLogin(); throw e;
+  });
+}
+$("#loginBtn").addEventListener("click", function(){
+  var k = $("#kode").value.trim(); if(!k) return;
+  $("#loginStatus").innerHTML = "";
+  loginMed(k,false).catch(function(){});
+});
+$("#kode").addEventListener("keydown", function(e){ if(e.key==="Enter") $("#loginBtn").click(); });
+$("#logout").addEventListener("click", function(){
+  try{ localStorage.removeItem("vsk.kode"); }catch(e){}
+  api("logud").then(visLogin);
+});
+$("#refresh").addEventListener("click", hent);
+
+var SPORNAVN = {svar:"Svar", like:"Like", til_dig:"Til dig", akut:"Akut", ignorer:"Ignorér"};
+
+function tid(iso){
+  if(!iso) return "";
+  var d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleString("da-DK",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+}
+
+function hent(){
+  return api("agentliste").then(function(r){
+    var jobs = r.jobs || [];
+    var afgjort = jobs.filter(function(j){ return j.status==="afgjort"; });
+    var bedoemt = r.enig + r.uenig;
+    var pct = bedoemt ? Math.round(r.enig / bedoemt * 100) : null;
+
+    $("#brandmeta").innerHTML = esc(r.tilstand);
+    $("#tilstandBoks").innerHTML = r.tilstand === "skygge"
+      ? '<div class="tilstand skygge"><div><b>Skyggetilstand.</b> Agenten vurderer hver kommentar, men rører ikke Facebook. Ingenting af det nedenfor er sket i virkeligheden.</div></div>'
+      : '<div class="tilstand live"><div><b>Agenten er aktiv ('+esc(r.tilstand)+').</b> Det den har udført, står markeret nedenfor og er sket på siden.</div></div>';
+
+    if(!r.noegler.claude){
+      $("#tilstandBoks").innerHTML += '<div class="status bad"><div class="dot"></div><div>Der er ingen Claude-nøgle i config.php, så alt sendes til dig uden vurdering.</div></div>';
+    }
+
+    $("#maal").innerHTML =
+      '<div><b>'+afgjort.length+'</b><span>Vurderet</span></div>' +
+      '<div><b>'+(pct===null?"–":pct+"%")+'</b><span>Du var enig</span></div>' +
+      '<div><b>'+(afgjort.length-bedoemt)+'</b><span>Ikke bedømt</span></div>';
+
+    $("#liste").innerHTML = afgjort.length ? afgjort.map(kort).join("")
+      : '<div class="empty">Ingen kommentarer endnu. Når nogen skriver under et opslag, dukker agentens vurdering op her et par minutter efter.</div>';
+  }).catch(function(e){
+    $("#liste").innerHTML = '<div class="status bad"><div class="dot"></div><div>'+esc(e.message)+'</div></div>';
+  });
+}
+
+function kort(j){
+  var b = j.beslutning || {};
+  var spor = b.spor || "til_dig";
+  var forslag = (spor==="svar" && b.svar)
+    ? '<div class="forslag"><em>Agentens svar</em>'+esc(b.svar)+'</div>' : '';
+  var udfoert = j.handlet ? '<span class="udfoert">Udført</span>' : '';
+  var fejl = j.handling_fejl ? '<div class="status bad" style="margin-top:0"><div class="dot"></div><div>Kunne ikke udføres: '+esc(j.handling_fejl)+'</div></div>' : '';
+  return '<div class="kom '+esc(spor)+'">'
+    + '<div class="komhoved"><span class="navn">'+esc(j.fra_navn)+'</span>'
+    +   '<span class="spor '+esc(spor)+'">'+esc(SPORNAVN[spor]||spor)+'</span>'
+    +   udfoert
+    +   '<span class="tid">'+esc(tid(j.modtaget))+'</span></div>'
+    + '<p class="komtekst">'+esc(j.tekst)+'</p>'
+    + '<p class="hvorfor">'+esc(b.begrundelse||"")+'</p>'
+    + forslag + fejl
+    + '<div class="domrow">'
+    +   '<button class="btn svarret'+(j.dom==="enig"?" valgt":"")+'" data-dom="enig" data-id="'+esc(j.id)+'">Rigtigt</button>'
+    +   '<button class="btn forkert'+(j.dom==="uenig"?" valgt":"")+'" data-dom="uenig" data-id="'+esc(j.id)+'">Forkert</button>'
+    +   '<span class="sagt">'+(j.dom_note ? esc(j.dom_note) : (j.dom ? "" : "Ikke bedømt"))+'</span>'
+    + '</div></div>';
+}
+
+document.addEventListener("click", function(e){
+  var b = e.target.closest("[data-dom]"); if(!b) return;
+  var dom = b.dataset.dom, id = b.dataset.id;
+  var note = "";
+  if(dom === "uenig"){
+    note = prompt("Hvad skulle den have gjort i stedet? (kan stå tomt)") || "";
+  }
+  b.disabled = true;
+  api("agentdom", {json:{id:id, dom:dom, note:note}}).then(hent).catch(function(err){
+    b.disabled = false; alert(err.message);
+  });
+});
+
+var logVist = false;
+$("#logToggle").addEventListener("click", function(){
+  logVist = !logVist;
+  $("#logboks").hidden = !logVist;
+  this.textContent = logVist ? "Skjul" : "Vis";
+  if(logVist) hentLog();
+});
+function hentLog(){
+  var boks = $("#logboks");
+  boks.textContent = "Henter …";
+  api("agentlog").then(function(r){
+    if(!r.findes){ boks.textContent = "Der er ingen log endnu. Den bliver skrevet, første gang Meta sender en kommentar."; return; }
+    boks.textContent = (r.linjer || []).join("\n") || "Loggen er tom.";
+    boks.scrollTop = boks.scrollHeight;
+  }).catch(function(e){ boks.textContent = "Kunne ikke hente loggen: " + e.message; });
+}
+
+api("hvem").then(function(r){
+  if(r.rolle === "brian"){ visApp(); hent(); return; }
+  var gemt = ls("kode");
+  if(gemt) return loginMed(gemt, true).catch(function(){});
+  visLogin();
+}).catch(function(){ visLogin(); });
+})();
+</script>
+</body>
+</html>

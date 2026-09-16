@@ -1,0 +1,6 @@
+# Rigtige koder og API-nøgler - brug -old.php som skabelon i stedet
+config.php
+
+# Indsendte billeder og navne (persondata)
+/data/*
+!/data/.htaccess
