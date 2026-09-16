@@ -120,6 +120,111 @@ function gyldigDato(string $dato): bool {
     return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
 }
 
+/* ---------- sedlen læses af Claude ---------- */
+
+function laesSeddel(string $jpeg): array {
+    require_once __DIR__ . '/agentlib.php';
+    if (CLAUDE_API_KEY === '') fejl('Der er ingen CLAUDE_API_KEY i config.php, så sedlen kan ikke læses automatisk.', 503);
+
+    // Håndskrift er svær. Den billige model, agenten bruger, er ikke god nok her.
+    $model = defined('CLAUDE_MODEL_SEDDEL') ? CLAUDE_MODEL_SEDDEL : 'claude-opus-5';
+
+    $navn = [
+        'type' => 'object',
+        'properties' => [
+            'fornavn'   => ['type' => 'string'],
+            'vaerested' => ['type' => 'string'],
+        ],
+        'required' => ['fornavn', 'vaerested'],
+        'additionalProperties' => false,
+    ];
+    $skema = [
+        'type' => 'object',
+        'properties' => [
+            'placeringer' => [
+                'type' => 'array',
+                'items' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'placering' => ['type' => 'integer'],
+                        'navne'     => ['type' => 'array', 'items' => $navn],
+                        'usikker'   => ['type' => 'boolean'],
+                    ],
+                    'required' => ['placering', 'navne', 'usikker'],
+                    'additionalProperties' => false,
+                ],
+            ],
+            'faellesskabspokal' => [
+                'type' => 'object',
+                'properties' => [
+                    'fornavn'     => ['type' => 'string'],
+                    'vaerested'   => ['type' => 'string'],
+                    'begrundelse' => ['type' => 'string'],
+                ],
+                'required' => ['fornavn', 'vaerested', 'begrundelse'],
+                'additionalProperties' => false,
+            ],
+            'bemaerkning' => ['type' => 'string'],
+        ],
+        'required' => ['placeringer', 'faellesskabspokal', 'bemaerkning'],
+        'additionalProperties' => false,
+    ];
+
+    $instruks = <<<TXT
+Billedet er en håndskrevet vinderseddel fra et sportsarrangement for brugere af danske væresteder.
+Sedlen er nummereret med placeringer (1, 2, 3 …). Ud for hver placering står ét navn eller flere
+navne, typisk et hold eller et par. Nogle gange står værestedet ud for navnet.
+
+Læs sedlen og returnér én post pr. placering i den rækkefølge, de står:
+- placering: tallet på sedlen.
+- navne: hver person på den placering for sig, med fornavn og værested. Står der intet værested, så lad feltet være tomt.
+  Står der et efternavn, så tag kun fornavnet med.
+- usikker: true, hvis du ikke kan læse et af navnene sikkert. Skriv så dit bedste bud.
+
+Står der en fællesskabspokal på sedlen, så udfyld faellesskabspokal. Ellers lad alle tre felter være tomme.
+Skriv i bemaerkning kort på dansk, hvis noget på sedlen ikke kunne læses. Ellers lad den være tom.
+Opdigt aldrig navne, der ikke står på sedlen.
+TXT;
+
+    $r = httpJson(CLAUDE_API_URL, [
+        'Content-Type: application/json',
+        'x-api-key: ' . CLAUDE_API_KEY,
+        'anthropic-version: 2023-06-01',
+        'anthropic-beta: server-side-fallback-2026-07-01',
+    ], [
+        'model'         => $model,
+        'max_tokens'    => 16000,
+        'fallbacks'     => 'default',
+        'output_config' => [
+            'effort' => 'medium',
+            'format' => ['type' => 'json_schema', 'schema' => $skema],
+        ],
+        'messages' => [[
+            'role' => 'user',
+            'content' => [
+                ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => 'image/jpeg', 'data' => base64_encode($jpeg)]],
+                ['type' => 'text', 'text' => $instruks],
+            ],
+        ]],
+    ], 110);
+
+    if ($r['kode'] !== 200) {
+        $besked = $r['data']['error']['message'] ?? ($r['fejl'] ?: ('HTTP ' . $r['kode']));
+        fejl('Claude kunne ikke læse sedlen: ' . $besked, 502);
+    }
+    $stop = (string) ($r['data']['stop_reason'] ?? '');
+    if ($stop === 'refusal') fejl('Claude ville ikke læse billedet. Tast navnene ind selv.', 502);
+    if ($stop === 'max_tokens') fejl('Svaret fra Claude blev afbrudt. Prøv igen.', 502);
+
+    $tekst = '';
+    foreach ((array) ($r['data']['content'] ?? []) as $blok) {
+        if (($blok['type'] ?? '') === 'text') $tekst .= $blok['text'];
+    }
+    $d = json_decode($tekst, true);
+    if (!is_array($d) || !isset($d['placeringer'])) fejl('Claudes svar kunne ikke læses. Prøv igen.', 502);
+    return $d;
+}
+
 /* ---------- ruter ---------- */
 
 $do = (string) ($_GET['do'] ?? '');
@@ -177,6 +282,17 @@ case 'opret':
     ];
     gemMeta($id, $meta);
     svar(['id' => $id]);
+
+case 'laesseddel':
+    if (!$post) fejl('Forkert metode.', 405);
+    kraev('a', 'brian');
+    $raw = file_get_contents('php://input') ?: '';
+    if ($raw === '') fejl('Tomt billede.');
+    if (strlen($raw) > MAX_BILLEDE_BYTES) fejl('Billedet er for stort.', 413);
+    $info = @getimagesizefromstring($raw);
+    if ($info === false || ($info[2] ?? 0) !== IMAGETYPE_JPEG) fejl('Kun JPEG kan sendes.');
+    @set_time_limit(150);
+    svar(laesSeddel($raw));
 
 case 'billede':
     $id = (string) ($_GET['id'] ?? '');

@@ -45,7 +45,7 @@
   <section class="panel active" data-panel="1">
     <div class="eyebrow">Trin 1 af 3</div>
     <h2>Tag et billede af sedlen</h2>
-    <p class="lede">Billedet sendes med, så Brian kan tjekke navnene mod din egen skrift. Du taster dem ind på næste side.</p>
+    <p class="lede">Claude læser navnene på sedlen og stiller dem op for dig. Billedet sendes også med, så Brian kan tjekke navnene mod din egen skrift.</p>
 
     <div class="plan">
       <div class="who">
@@ -77,6 +77,7 @@
     <div class="eyebrow">Trin 2 af 3</div>
     <h2>Tast vinderne ind</h2>
     <p class="lede">Fornavn og værested, i den rækkefølge de skal stå i opslaget. Tryk på den grå firkant og vælg billedet af hver vinder — beskæringen klarer Brian.</p>
+    <div id="laesNote"></div>
 
     <div class="cards" id="winnerCards"></div>
     <div class="addrow"><button class="btn btn-ghost btn-wide" id="addWinner">+ Tilføj en vinder mere</button></div>
@@ -351,7 +352,7 @@ function pickPhoto(kind, id){ pendingPick = {kind:kind, id:id}; photoInput.value
 function cardHTML(item, kind, index){
   var isC = kind==="community";
   var cls = isC ? "faellesskab" : ("p"+(index+1));
-  var label = isC ? "Fællesskabspokalen" : (index+1)+". plads";
+  var label = isC ? "Fællesskabspokalen" : (index+1)+". plads" + (item.usikker ? " · ⚠ tjek navnet" : "");
   var p = item.photo;
   var box = p
     ? '<button class="photobox filled" data-photo="'+kind+'" data-id="'+item.id+'"><img src="'+p.preview+'" alt=""><span class="edit">Skift</span></button>'
@@ -411,10 +412,63 @@ noteInput.addEventListener("change", function(){
     $("#notePreview").hidden = false;
     $("#noteDrop").hidden = true;
     $("#noteStatus").innerHTML = "";
+    laesSeddel(c);
   }).catch(function(){
     $("#noteStatus").innerHTML = '<div class="status bad"><div class="dot"></div><div>Billedet kunne ikke åbnes. Tag det igen med kameraet.</div></div>';
   });
 });
+
+/* ---------- Claude læser sedlen ---------- */
+function noteStatus(cls, tekst){
+  $("#noteStatus").innerHTML = '<div class="status '+cls+'"><div class="dot"></div><div>'+esc(tekst)+'</div></div>';
+}
+function unikke(liste){
+  return liste.filter(function(v, i){ return v && liste.indexOf(v) === i; });
+}
+function laesSeddel(canvas){
+  var harTastet = state.winners.some(function(w){ return w.fornavn || w.photo; });
+  noteStatus("think", "Claude læser sedlen … det tager et halvt minuts tid.");
+  var knap = document.querySelector('[data-panel="1"] [data-go="2"]');
+  knap.disabled = true;
+  canvasToBlob(canvas, 0.88).then(function(b){
+    return api("laesseddel", {blob:b});
+  }).then(function(r){
+    var placeringer = (r.placeringer || []).filter(function(p){ return p.navne && p.navne.length; });
+    if(!placeringer.length){
+      noteStatus("bad", "Claude kunne ikke finde nogen navne på sedlen. Tast dem ind på næste side." + (r.bemaerkning ? " (" + r.bemaerkning + ")" : ""));
+      return;
+    }
+    if(harTastet && !confirm("Claude har læst " + placeringer.length + " placeringer. Skal de erstatte det, du allerede har tastet og valgt af billeder?")){
+      noteStatus("hand", "Sedlen er læst, men dine egne navne er beholdt.");
+      return;
+    }
+    // Én række pr. placering. Står der et par eller et hold, samles navnene i samme række.
+    state.winners = placeringer.map(function(p){
+      var w = blankWinner();
+      w.fornavn = unikke(p.navne.map(function(n){ return (n.fornavn || "").trim(); })).join(" & ");
+      w.vaerested = unikke(p.navne.map(function(n){ return (n.vaerested || "").trim(); })).join(" / ");
+      w.usikker = !!p.usikker;
+      return w;
+    });
+    var fp = r.faellesskabspokal || {};
+    if(fp.fornavn && !state.community.fornavn){
+      state.community.fornavn = fp.fornavn;
+      state.community.vaerested = fp.vaerested || "";
+      state.community.begrundelse = fp.begrundelse || "";
+    }
+    saveDraft();
+    var usikre = state.winners.filter(function(w){ return w.usikker; }).length;
+    var tekst = "Claude fandt " + placeringer.length + " placeringer. Tjek navnene mod sedlen, og tryk på den grå firkant for at vælge billedet til hver række."
+      + (usikre ? " Rækker markeret med ⚠ kunne ikke læses helt sikkert." : "")
+      + (r.bemaerkning ? " Bemærkning: " + r.bemaerkning : "");
+    $("#laesNote").innerHTML = '<div class="status hand"><div class="dot"></div><div>'+esc(tekst)+'</div></div>';
+    $("#noteStatus").innerHTML = "";
+    renderCards();
+    go(2);
+  }).catch(function(e){
+    noteStatus("bad", "Sedlen kunne ikke læses automatisk. Tast navnene ind selv på næste side. (" + e.message + ")");
+  }).then(function(){ knap.disabled = false; });
+}
 
 /* ---------- opsummering ---------- */
 function renderSummary(){
@@ -508,6 +562,7 @@ $("#restart").addEventListener("click", function(){
   state.winners = [];
   state.community = {id:"c", fornavn:"", vaerested:"", begrundelse:"", photo:null};
   state.note = null; state.stemning = ""; $("#stemning").value = "";
+  $("#laesNote").innerHTML = ""; $("#noteStatus").innerHTML = "";
   $("#notePreview").hidden = true; $("#noteDrop").hidden = false;
   $("#consent").checked = false;
   clearDraft(); renderCards(); renderPlan(); go(1);

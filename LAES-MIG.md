@@ -2,7 +2,8 @@
 
 To sider og en lille PHP-fil. A registrerer dagens vindere på sin telefon,
 du gennemgår dem, beskærer billederne og henter en pakke, der er klar til
-Facebook. Ingen database, ingen konti hos andre, ingen API-nøgler.
+Facebook. Ingen database. Claude læser den håndskrevne seddel, hvis der
+står en `CLAUDE_API_KEY` i `config.php`; ellers taster A navnene selv.
 
 ---
 
@@ -52,8 +53,9 @@ udvidelser ud over det, der altid er med. Der er ikke brug for
 ## Sådan bruges det
 
 **A, efter arrangementet.** Fotograferer sedlen (den følger med, så du kan
-tjekke navnene mod hendes egen skrift). Taster vinderne ind i rækkefølge og
-vælger et billede til hver. Skriver én linje om stemningen. Sætter flueben i,
+tjekke navnene mod hendes egen skrift). Claude læser sedlen og laver én række
+pr. placering — et par eller et hold står i samme række. Hun tjekker navnene og
+vælger et billede til hver række. Skriver én linje om stemningen. Sætter flueben i,
 at alle på billederne har sagt ja. Trykker send.
 
 **Dig, bagefter.** Åbner `gennemgang.html`, klikker dagens indsendelse frem,
