@@ -152,11 +152,12 @@ function laesSeddel(string $jpeg): array {
                 'items' => [
                     'type' => 'object',
                     'properties' => [
+                        'gruppe'    => ['type' => 'string'],
                         'placering' => ['type' => 'integer'],
                         'navne'     => ['type' => 'array', 'items' => $navn],
                         'usikker'   => ['type' => 'boolean'],
                     ],
-                    'required' => ['placering', 'navne', 'usikker'],
+                    'required' => ['gruppe', 'placering', 'navne', 'usikker'],
                     'additionalProperties' => false,
                 ],
             ],
@@ -179,11 +180,17 @@ function laesSeddel(string $jpeg): array {
     $instruks = <<<TXT
 Billedet er en håndskrevet vinderseddel fra et sportsarrangement for brugere af danske væresteder.
 Sedlen er nummereret med placeringer (1, 2, 3 …). Ud for hver placering står ét navn eller flere
-navne, typisk et hold eller et par. Nogle gange står værestedet ud for navnet.
+navne, typisk et hold eller et par. Ofte står værestedet og byen ud for navnene.
+Sedlen kan være delt op i flere rækker eller puljer (f.eks. "A-række" og "B-række"), der hver har
+deres egne placeringer.
 
 Læs sedlen og returnér én post pr. placering i den rækkefølge, de står:
+- gruppe: overskriften på den række eller pulje, placeringen hører til, f.eks. "A-række". Tom, hvis sedlen ikke er delt op.
 - placering: tallet på sedlen.
-- navne: hver person på den placering for sig, med fornavn og værested. Står der intet værested, så lad feltet være tomt.
+- navne: hver person på den placering for sig, med fornavn og værested. Værestedet skrives med byen,
+  hvis den står der, f.eks. "Borgercaféen Haderslev". Deler to personer værested, får begge det.
+  Står der to væresteder adskilt af skråstreg, hører det første til den første person og det andet til den anden;
+  en by skrevet over et værested hører til det værested. Står der intet værested, så lad feltet være tomt.
   Står der et efternavn, så tag kun fornavnet med.
 - usikker: true, hvis du ikke kan læse et af navnene sikkert. Skriv så dit bedste bud.
 

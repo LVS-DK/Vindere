@@ -168,7 +168,16 @@ var state = {
   community:{ id:"c", fornavn:"", vaerested:"", begrundelse:"", photo:null },
   note:null
 };
-function blankWinner(){ return { id:"w"+(++uid), fornavn:"", vaerested:"", photo:null }; }
+function blankWinner(){ return { id:"w"+(++uid), gruppe:"", placering:0, fornavn:"", vaerested:"", photo:null }; }
+/* "Mads", "Mads og Claus", "Mads, Claus og Ib" */
+function samlNavne(liste){
+  liste = liste.filter(function(x){ return x; });
+  if(liste.length < 2) return liste.join("");
+  return liste.slice(0, -1).join(", ") + " og " + liste[liste.length-1];
+}
+function pladsTekst(w, i){
+  return (w.gruppe ? w.gruppe + " · " : "") + (w.placering || i+1) + ". plads";
+}
 function ls(k, v){
   try{ if(v===undefined) return localStorage.getItem("vs."+k); localStorage.setItem("vs."+k, v); }catch(e){}
   return null;
@@ -178,7 +187,7 @@ function saveDraft(){
   try{
     localStorage.setItem(KEY, JSON.stringify({
       stemning:state.stemning,
-      winners:state.winners.map(function(w){ return {fornavn:w.fornavn, vaerested:w.vaerested}; }),
+      winners:state.winners.map(function(w){ return {gruppe:w.gruppe, placering:w.placering, fornavn:w.fornavn, vaerested:w.vaerested}; }),
       community:{fornavn:state.community.fornavn, vaerested:state.community.vaerested, begrundelse:state.community.begrundelse}
     }));
   }catch(e){}
@@ -193,7 +202,7 @@ function loadDraft(){
       state.community.begrundelse=d.community.begrundelse||"";
     }
     if(d.winners && d.winners.length){
-      state.winners = d.winners.map(function(w){ var n=blankWinner(); n.fornavn=w.fornavn||""; n.vaerested=w.vaerested||""; return n; });
+      state.winners = d.winners.map(function(w){ var n=blankWinner(); n.gruppe=w.gruppe||""; n.placering=w.placering||0; n.fornavn=w.fornavn||""; n.vaerested=w.vaerested||""; return n; });
     }
   }catch(e){}
 }
@@ -351,8 +360,8 @@ function pickPhoto(kind, id){ pendingPick = {kind:kind, id:id}; photoInput.value
 /* ---------- kort ---------- */
 function cardHTML(item, kind, index){
   var isC = kind==="community";
-  var cls = isC ? "faellesskab" : ("p"+(index+1));
-  var label = isC ? "Fællesskabspokalen" : (index+1)+". plads" + (item.usikker ? " · ⚠ tjek navnet" : "");
+  var cls = isC ? "faellesskab" : ("p"+(item.placering || index+1));
+  var label = isC ? "Fællesskabspokalen" : pladsTekst(item, index) + (item.usikker ? " · ⚠ tjek navnet" : "");
   var p = item.photo;
   var box = p
     ? '<button class="photobox filled" data-photo="'+kind+'" data-id="'+item.id+'"><img src="'+p.preview+'" alt=""><span class="edit">Skift</span></button>'
@@ -445,7 +454,9 @@ function laesSeddel(canvas){
     // Én række pr. placering. Står der et par eller et hold, samles navnene i samme række.
     state.winners = placeringer.map(function(p){
       var w = blankWinner();
-      w.fornavn = unikke(p.navne.map(function(n){ return (n.fornavn || "").trim(); })).join(" & ");
+      w.gruppe = (p.gruppe || "").trim();
+      w.placering = p.placering || 0;
+      w.fornavn = samlNavne(p.navne.map(function(n){ return (n.fornavn || "").trim(); }));
       w.vaerested = unikke(p.navne.map(function(n){ return (n.vaerested || "").trim(); })).join(" / ");
       w.usikker = !!p.usikker;
       return w;
@@ -474,7 +485,7 @@ function laesSeddel(canvas){
 function renderSummary(){
   $("#sumMeta").innerHTML = "<b>" + esc(state.sport || "Sportsgren ikke sat") + "</b> · " + esc(danskDato(state.dato));
   var rows = state.winners.map(function(w,i){
-    return '<div class="sumrow"><div class="pos">'+(i+1)+'.</div>'
+    return '<div class="sumrow"><div class="pos">'+(w.gruppe ? esc(w.gruppe.charAt(0)) : "")+(w.placering||i+1)+'.</div>'
       + (w.photo ? '<img src="'+w.photo.preview+'" alt="">' : '<div class="nofoto">Intet<br>foto</div>')
       + '<div class="who"><b>'+esc(w.fornavn||"Navn mangler")+'</b><span>'+esc(w.vaerested||"Værested mangler")+'</span></div></div>';
   }).join("");
@@ -519,7 +530,7 @@ $("#sendBtn").addEventListener("click", function(){
     stemning: state.stemning,
     samtykke: true,
     vindere: vindere.map(function(w,i){
-      return {placering:i+1, fornavn:w.fornavn, vaerested:w.vaerested, slot: w.photo ? String(i+1) : null};
+      return {gruppe:w.gruppe||"", placering:w.placering||i+1, fornavn:w.fornavn, vaerested:w.vaerested, slot: w.photo ? String(i+1) : null};
     }),
     faellesskabspokal: (state.community.fornavn || state.community.photo) ? {
       fornavn: state.community.fornavn, vaerested: state.community.vaerested,

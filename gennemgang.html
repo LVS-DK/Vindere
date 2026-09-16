@@ -89,6 +89,16 @@
     <div class="sectionhead"><h3>Vindere</h3><div class="rule"></div></div>
     <div class="cards" id="reviewCards"></div>
 
+    <div class="sectionhead"><h3>Vinderliste</h3><div class="rule"></div></div>
+    <div class="field">
+      <label for="vinderliste">Til opslaget</label>
+      <div class="hint">Laves ud fra navnene ovenfor og opdateres, når du retter dem. Du kan også rette direkte i teksten.</div>
+      <textarea id="vinderliste" rows="10"></textarea>
+    </div>
+    <div class="navrow" style="margin-top:0">
+      <button class="btn btn-ghost" id="kopierListe">Kopiér vinderlisten</button>
+    </div>
+
     <div class="field" style="margin-top:24px">
       <label for="stemning">Dagens stemning</label>
       <textarea id="stemning"></textarea>
@@ -100,7 +110,7 @@
     </div>
     <div id="approveStatus"></div>
     <div class="footnote">
-      Pakken indeholder billederne som 1080 × 1080 px JPEG, nummereret i galleriets rækkefølge, plus opslag.json.
+      Pakken indeholder billederne som 1080 × 1080 px JPEG, nummereret i galleriets rækkefølge, plus vinderliste.txt og opslag.json.
       <button id="deleteBtn">Slet denne indsendelse</button>
     </div>
   </section>
@@ -344,8 +354,8 @@ function opdaterMeta(){
 }
 function reviewRow(item, kind, index){
   var isC = kind==="community";
-  var cls = isC ? "faellesskab" : ("p"+(index+1));
-  var label = isC ? "Fællesskabspokalen" : (index+1)+". plads";
+  var cls = isC ? "faellesskab" : ("p"+(item.placering || index+1));
+  var label = isC ? "Fællesskabspokalen" : (item.gruppe ? item.gruppe + " · " : "") + (item.placering || index+1) + ". plads";
   var slot = item.slot;
   var u = slot ? udsnit[slot] : null;
   var box = slot
@@ -367,8 +377,33 @@ function renderReview(){
   var html = (post.vindere||[]).map(function(v,i){ return reviewRow(v,"winner",i); }).join("");
   if(post.faellesskabspokal) html += reviewRow(post.faellesskabspokal,"community",0);
   $("#reviewCards").innerHTML = html;
+  $("#vinderliste").value = vinderliste();
   opdaterMeta();
 }
+/* A-række
+   1. Mads og Claus
+   2. Martin og Christa */
+function vinderliste(){
+  var linjer = [], gruppe = null;
+  (post.vindere||[]).forEach(function(v, i){
+    if(!v.fornavn) return;
+    var g = v.gruppe || "";
+    if(g !== gruppe){
+      if(linjer.length) linjer.push("");
+      if(g) linjer.push(g);
+      gruppe = g;
+    }
+    linjer.push((v.placering || i+1) + ". " + v.fornavn);
+  });
+  return linjer.join("\n");
+}
+$("#kopierListe").addEventListener("click", function(){
+  var felt = $("#vinderliste"), knap = this;
+  var klar = function(){ knap.textContent = "Kopieret ✓"; setTimeout(function(){ knap.textContent = "Kopiér vinderlisten"; }, 1800); };
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(felt.value).then(klar, function(){ felt.select(); document.execCommand("copy"); klar(); });
+  } else { felt.select(); document.execCommand("copy"); klar(); }
+});
 document.addEventListener("input", function(e){
   var t = e.target;
   if(!t.dataset || !t.dataset.f || !post) return;
@@ -377,6 +412,7 @@ document.addEventListener("input", function(e){
   } else if(t.dataset.kind === "winner"){
     var v = (post.vindere||[])[+t.dataset.i];
     if(v) v[t.dataset.f] = t.value;
+    if(t.dataset.f === "fornavn") $("#vinderliste").value = vinderliste();
   }
 });
 $("#stemning").addEventListener("input", function(){ if(post) post.stemning = this.value; });
@@ -493,11 +529,13 @@ $("#approveBtn").addEventListener("click", function(){
 
   kaede.then(function(){
     status("hand", "Pakker …");
+    zip.file("vinderliste.txt", $("#vinderliste").value);
     zip.file("opslag.json", JSON.stringify({
       sport: post.sport, dato: post.dato, stemning: post.stemning,
       vindere: (post.vindere||[]).map(function(v,i){
-        return {placering:i+1, fornavn:v.fornavn, vaerested:v.vaerested, billede:v.billede || null};
+        return {gruppe:v.gruppe || "", placering:v.placering || i+1, fornavn:v.fornavn, vaerested:v.vaerested, billede:v.billede || null};
       }),
+      vinderliste: $("#vinderliste").value,
       faellesskabspokal: f ? {fornavn:f.fornavn, vaerested:f.vaerested, begrundelse:f.begrundelse, billede:f.billede||null} : null,
       samtykke_bekraeftet: !!post.samtykke,
       godkendt: new Date().toISOString()
