@@ -146,7 +146,7 @@ Har du adgang til en kommandolinje (SSH), står du i mappen og skriver:
 Har du ikke det — og det har man sjældent på et almindeligt webhotel — så åbn
 den i browseren i stedet, med din egen `FB_VERIFY_TOKEN` bagefter:
 
-    https://ditdomæne.dk/vindersedlen/tjek-token.php?noegle=DIN_VERIFY_TOKEN
+    https://ditdomæne.dk/vindere/tjek-token.php?noegle=DIN_VERIFY_TOKEN
 
 Nøglen skal med, for ellers kunne enhver forbipasserende se, hvad der er sat op
 på din server. Samme fremgangsmåde virker for `test-regler.php`.
@@ -168,7 +168,7 @@ er ikke noget, vi kan skynde på.
 
 Under **Webhooks** i appen tilføjer du en Page-abonnering:
 
-- Callback-URL: `https://ditdomæne.dk/vindersedlen/webhook.php`
+- Callback-URL: `https://ditdomæne.dk/vindere/webhook.php`
 - Verify token: den samme streng, du har skrevet i `FB_VERIFY_TOKEN`
 - Felt: `feed`
 
@@ -213,11 +213,11 @@ kommentarer, før du beslutter dig.
 
 Agenten arbejder ikke af sig selv. Den skal kaldes hvert minut:
 
-    * * * * * /usr/bin/php /sti/til/vindersedlen/agent.php >/dev/null 2>&1
+    * * * * * /usr/bin/php /sti/til/vindere/agent.php >/dev/null 2>&1
 
 Kan dit webhotel kun kalde en URL i stedet for en fil, virker det også:
 
-    https://ditdomæne.dk/vindersedlen/agent.php?noegle=DIN_FB_VERIFY_TOKEN
+    https://ditdomæne.dk/vindere/agent.php?noegle=DIN_FB_VERIFY_TOKEN
 
 Kører cron kun hvert femte minut, gør det ikke noget. Svarene er alligevel
 forsinket 4 til 14 minutter med vilje.
@@ -302,7 +302,7 @@ Du kan afprøve mønstrene uden at røre Facebook — enten fra en kommandolinje
 
 eller i browseren:
 
-    https://ditdomæne.dk/vindersedlen/test-regler.php?noegle=DIN_VERIFY_TOKEN
+    https://ditdomæne.dk/vindere/test-regler.php?noegle=DIN_VERIFY_TOKEN
 
 Møder I i virkeligheden en kommentar, agenten placerede forkert, så skriv den
 ind i den fil med det spor, den burde have fået. Så kan vi rette mønsteret og se

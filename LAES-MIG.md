@@ -17,9 +17,9 @@ være lang; du taster den kun én gang pr. enhed.
 
 **2. Læg mappen op.**
 Send hele indholdet op i en undermappe på dit webhotel, f.eks.
-`https://ditdomæne.dk/vindersedlen/`. Filerne skal ligge sådan her:
+`https://ditdomæne.dk/vindere/`. Filerne skal ligge sådan her:
 
-    vindersedlen/
+    vindere/
       index.html          ← A's side
       gennemgang.html     ← din side
       api.php
@@ -109,7 +109,7 @@ den.
 Der følger to små tjek-værktøjer med til kommentar-agenten. Har du ikke SSH på
 webhotellet, kan begge åbnes i browseren med din `FB_VERIFY_TOKEN` bagefter:
 
-    https://ditdomæne.dk/vindersedlen/tjek-token.php?noegle=DIN_VERIFY_TOKEN
-    https://ditdomæne.dk/vindersedlen/test-regler.php?noegle=DIN_VERIFY_TOKEN
+    https://ditdomæne.dk/vindere/tjek-token.php?noegle=DIN_VERIFY_TOKEN
+    https://ditdomæne.dk/vindere/test-regler.php?noegle=DIN_VERIFY_TOKEN
 
 Uden nøglen svarer de ikke.

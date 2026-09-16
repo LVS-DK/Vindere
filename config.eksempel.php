@@ -16,7 +16,7 @@ define('OPBEVARING_DAGE', 14);
 // Mappen hvor billeder og navne gemmes. Ligger som standard ved siden af
 // api.php og er lukket af med .htaccess. Ligger dit webhotel sådan, at du
 // kan pege uden for public_html, er det endnu bedre — f.eks.:
-// define('DATA_DIR', dirname(__DIR__) . '/vindersedlen-data');
+// define('DATA_DIR', dirname(__DIR__) . '/vindere-data');
 define('DATA_DIR', __DIR__ . '/data');
 
 // Største enkeltbillede, der tages imod (bytes).
