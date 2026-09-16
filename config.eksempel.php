@@ -44,8 +44,8 @@ define('FB_VERIFY_TOKEN', 'skift-mig-verify');
 define('FB_PAGE_ID', '');
 define('FB_PAGE_TOKEN', '');
 
-// Graph API-version. v25.0 er aktuel; brug den, din app-oversigt viser.
-define('FB_API', 'https://graph.facebook.com/v25.0');
+// Graph API-version. v26.0 er aktuel; brug den, din app-oversigt viser.
+define('FB_API', 'https://graph.facebook.com/v26.0');
 
 // API-nøgle fra console.anthropic.com.
 define('CLAUDE_API_KEY', '');
@@ -61,5 +61,11 @@ define('MAKS_SVAR_PR_TRAAD', 6);
 
 // Hvor længe efter et opslag agenten overhovedet reagerer (timer).
 define('OVERVAAGES_TIMER', 48);
+
+// Nøgle til at kalde agent.php som adresse — brug den, hvis dit webhotel
+// ikke har cron, og du i stedet lader en tjeneste udefra kalde den.
+// Lad den stå tom for at genbruge FB_VERIFY_TOKEN, men sæt hellere en
+// selvstændig: så kommer webhookens token aldrig ud af huset.
+define('CRON_NOEGLE', '');
 
 define('KOE_DIR', DATA_DIR . '/kommentarer');

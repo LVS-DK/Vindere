@@ -1,4 +1,4 @@
-# Rigtige koder og API-nøgler - brug -old.php som skabelon i stedet
+# Rigtige koder og API-nøgler - kopiér config.eksempel.php til config.php og udfyld den
 config.php
 
 # Indsendte billeder og navne (persondata)

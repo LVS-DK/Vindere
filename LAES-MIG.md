@@ -9,7 +9,8 @@ Facebook. Ingen database, ingen konti hos andre, ingen API-nøgler.
 ## Sådan kommer du i gang
 
 **1. Ret de to koder.**
-Åbn `config.php` og udskift `skift-mig-a` og `skift-mig-brian` med dine egne.
+Kopiér `config.eksempel.php` til `config.php` (den ligger ikke i repoet, fordi
+den indeholder dine koder og nøgler). Åbn `config.php` og udskift `skift-mig-a` og `skift-mig-brian` med dine egne.
 A's kode skal hun kunne taste på en telefon — tre almindelige ord med
 bindestreger imellem er bedre end noget kort og kryptisk. Din egen må gerne
 være lang; du taster den kun én gang pr. enhed.
